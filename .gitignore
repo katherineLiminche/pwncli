@@ -5,10 +5,12 @@ data/
 *.pcap
 *.22000
 *.cap
+config.json
 
 *.db
 
 tmp_autopwn.txt
 
 .DS_Store
+
 

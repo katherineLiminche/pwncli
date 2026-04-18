@@ -6,6 +6,7 @@ import subprocess
 import sqlite3
 import shutil
 import time
+import glob
 from pathlib import Path
 
 BASE = Path(
@@ -259,11 +260,17 @@ def autopwn():
 
     print(f"Generated {len(words)} candidates")
 
+    hash_files = glob.glob(str(BASE / "data/hashes" / "*.22000"))
+
+    if not hash_files:
+        print("No hash files found")
+        return
+
     subprocess.run([
         "hashcat",
         "-m",
         "22000",
-        str(BASE / "data/hashes/*.22000"),
+        *hash_files,
         str(wordlist)
     ])
 
