@@ -1,57 +1,58 @@
 import sqlite3
+import sys
+import os
 from pathlib import Path
 from datetime import datetime, timedelta
 
-BASE = Path.home() / "pwnagotchi"
-
+BASE = Path(os.getenv("PWN_BASE", Path.home() / "pwnagotchi"))
 GOOD = BASE / "data/good_pcaps"
 BAD = BASE / "data/bad_pcaps"
 HASHES = BASE / "data/hashes"
-
 DB = BASE / "db/networks.db"
 
-BAD_RETENTION_DAYS = 7
+BAD_RETENTION_DAYS = int(os.getenv("PWN_BAD_RETENTION_DAYS", 7))
 
 conn = sqlite3.connect(DB)
 cur = conn.cursor()
 
-print("Starting cleanup...")
+try:
+    print("Starting cleanup...")
+    removed = 0
 
-# удалить старые плохие pcaps
-limit = datetime.now() - timedelta(days=BAD_RETENTION_DAYS)
+    # Remove old bad pcaps
+    limit = datetime.now() - timedelta(days=BAD_RETENTION_DAYS)
 
-for pcap in BAD.glob("*.pcap"):
+    for pcap in BAD.glob("*.pcap"):
+        mtime = datetime.fromtimestamp(pcap.stat().st_mtime)
+        if mtime < limit:
+            print("Removing old bad capture:", pcap.name)
+            pcap.unlink()
+            removed += 1
 
-    mtime = datetime.fromtimestamp(pcap.stat().st_mtime)
+    # Remove files where password was found
+    cur.execute("SELECT filename FROM captures WHERE password IS NOT NULL")
+    rows = cur.fetchall()
 
-    if mtime < limit:
-        print("Removing old bad capture:", pcap.name)
-        pcap.unlink()
+    for row in rows:
+        filename = row[0]
 
-# удалить файлы если пароль найден
-cur.execute("""
-SELECT filename FROM captures
-WHERE password IS NOT NULL
-""")
+        pcap_file = GOOD / filename
+        hash_file = HASHES / (Path(filename).stem + ".22000")
 
-rows = cur.fetchall()
+        if pcap_file.exists():
+            print("Removing cracked pcap:", filename)
+            pcap_file.unlink()
+            removed += 1
 
-for row in rows:
+        if hash_file.exists():
+            print("Removing cracked hash:", hash_file.name)
+            hash_file.unlink()
+            removed += 1
 
-    filename = row[0]
+    print(f"Cleanup complete — {removed} files removed")
 
-    pcap_file = GOOD / filename
-    hash_file = HASHES / (Path(filename).stem + ".22000")
-
-    if pcap_file.exists():
-        print("Removing cracked pcap:", filename)
-        pcap_file.unlink()
-
-    if hash_file.exists():
-        print("Removing cracked hash:", hash_file.name)
-        hash_file.unlink()
-
-conn.close()
-
-print("Cleanup complete")
-
+except Exception as e:
+    print(f"Error: {e}")
+    sys.exit(1)
+finally:
+    conn.close()
