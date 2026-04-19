@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import os
 import json
-from getpass import getpass
 from pathlib import Path
 
-BASE = Path.home() / "pwnagotchi"
+BASE = Path(os.getenv("PWN_BASE", Path.home() / "pwnagotchi"))
 CONFIG_FILE = BASE / "config.json"
 
 DEFAULT_CONFIG = {
@@ -51,7 +51,10 @@ def configure(force: bool = False) -> dict:
 
         port = input(f"SSH port [{cfg['ssh_port']}]: ").strip()
         if port:
-            cfg["ssh_port"] = int(port)
+            try:
+                cfg["ssh_port"] = int(port)
+            except ValueError:
+                print(f"Invalid port '{port}', keeping current value: {cfg['ssh_port']}")
 
         ssh_key = input(f"SSH key path [{cfg['ssh_key']}]: ").strip()
         if ssh_key:
