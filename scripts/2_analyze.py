@@ -1,9 +1,10 @@
 import subprocess
 import sqlite3
 import shutil
+import sys
 from pathlib import Path
-
-BASE = Path.home() / "pwnagotchi"
+import os
+BASE = Path(os.getenv("PWN_BASE", Path.home() / "pwnagotchi"))
 
 INCOMING = BASE / "data/incoming"
 GOOD = BASE / "data/good_pcaps"
@@ -34,36 +35,41 @@ CREATE TABLE IF NOT EXISTS captures(
 )
 """)
 
-for pcap in INCOMING.glob("*.pcap"):
+try:
+    for pcap in INCOMING.glob("*.pcap"):
 
-    print(f"Analyzing {pcap.name}")
+        print(f"Analyzing {pcap.name}")
+    
+        hashfile = HASHES / (pcap.stem + ".22000")
+        result = subprocess.run(
+            [
+                "hcxpcapngtool",
+                str(pcap)
+            ],
+            capture_output=True,
+            text=True
+        )
 
-    result = subprocess.run(
-        [
-            "hcxpcapngtool",
-            str(pcap)
-        ],
-        capture_output=True,
-        text=True
-    )
+        handshake = "eapol" in result.stdout.lower()
+        pmkid = "pmkid" in result.stdout.lower()
+        usable = handshake or pmkid
 
-    output = result.stdout.lower()
+        c.execute(
+            "INSERT OR IGNORE INTO captures(filename, handshake, pmkid, hashfile) VALUES(?,?,?,?)",
+            (pcap.name, int(handshake), int(pmkid), None)  # hashfile filled in by 3_convert.py
+        )
+        if usable:
+            print("  usable capture found")
+            shutil.move(pcap, GOOD / pcap.name)
+        else:
+            print("  no authentication material")
+            shutil.move(pcap, BAD / pcap.name)
 
-    handshake = "eapol" in output
-    pmkid = "pmkid" in output
 
-    if handshake or pmkid:
-        print("  usable capture found")
-        shutil.move(pcap, GOOD / pcap.name)
-    else:
-        print("  no authentication material")
-        shutil.move(pcap, BAD / pcap.name)
-
-    c.execute(
-        "INSERT OR IGNORE INTO captures(filename, handshake, pmkid) VALUES(?,?,?)",
-        (pcap.name, int(handshake), int(pmkid))
-    )
-
-conn.commit()
-conn.close()
+        conn.commit()
+except Exception as e:
+    print(f"Error: {e}")
+    sys.exit(1)
+finally:
+    conn.close()
 
