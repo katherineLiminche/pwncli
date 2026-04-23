@@ -9,4 +9,4 @@ requires-python = ">=3.8"
 license = {text = "MIT"}
 
 [project.scripts]
-pwnycli = "pwnycli.__main__:main"
+pwnycli = "dpwnycli.__main__:main"
